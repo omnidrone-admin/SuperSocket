@@ -1385,6 +1385,23 @@ namespace SuperSocket.SocketBase
         }
 
         /// <summary>
+        /// Creates the app session.
+        /// </summary>
+        /// <param name="endpoint">The session IP endpoint.</param>
+        /// <returns></returns>
+        public IAppSession CreateAppSessionFromEndpoint(IPEndPoint endpoint)
+        {
+            if (!ExecuteConnectionFilters(endpoint))
+                return NullAppSession;
+
+            var appSession = new TAppSession();;
+
+            //appSession.Initialize(this, socketSession);
+
+            return appSession;
+        }
+
+        /// <summary>
         /// create a new TAppSession instance, you can override it to create the session instance in your own way
         /// </summary>
         /// <param name="socketSession">the socket session.</param>

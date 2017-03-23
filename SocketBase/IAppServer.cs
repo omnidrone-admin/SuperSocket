@@ -12,6 +12,7 @@ using SuperSocket.SocketBase.Config;
 using SuperSocket.SocketBase.Logging;
 using SuperSocket.SocketBase.Protocol;
 using SuperSocket.SocketBase.Provider;
+using System.Net;
 
 namespace SuperSocket.SocketBase
 {
@@ -59,6 +60,12 @@ namespace SuperSocket.SocketBase
         /// <returns></returns>
         IAppSession CreateAppSession(ISocketSession socketSession);
 
+        /// <summary>
+        /// Creates the app session.
+        /// </summary>
+        /// <param name="endpoint">The session IP endpoint.</param>
+        /// <returns></returns>
+        IAppSession CreateAppSessionFromEndpoint(IPEndPoint endpoint);
 
         /// <summary>
         /// Registers the new created app session into the appserver's session container.

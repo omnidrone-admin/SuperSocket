@@ -11,6 +11,10 @@ using SuperSocket.SocketBase;
 using SuperSocket.SocketBase.Command;
 using SuperSocket.SocketBase.Protocol;
 using SuperSocket.SocketEngine.AsyncSocket;
+using LiteNetLib;
+using LiteNetLib.Utils;
+using SuperSocket.SocketBase.Logging;
+using SuperSocket.SocketBase.Config;
 
 namespace SuperSocket.SocketEngine
 {
@@ -29,6 +33,10 @@ namespace SuperSocket.SocketEngine
 
         private IRequestHandler<TRequestInfo> m_RequestHandler;
 
+        private INetEventListener liteServerListener;
+
+        private NetManager server;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="UdpSocketServer&lt;TRequestInfo&gt;"/> class.
         /// </summary>
@@ -45,6 +53,24 @@ namespace SuperSocket.SocketEngine
             m_IsUdpRequestInfo = typeof(TRequestInfo).IsSubclassOf(typeof(UdpRequestInfo));
 
             m_UdpRequestFilter = ((IReceiveFilterFactory<TRequestInfo>)appServer.ReceiveFilterFactory).CreateFilter(appServer, null, null);
+
+            liteServerListener = new ServerListener<TRequestInfo>(appServer, m_RequestHandler, m_UdpRequestFilter);
+            server = new NetManager(liteServerListener, appServer.Config.MaxConnectionNumber /* maximum clients */, "SomeConnectionKey");
+            server.Start(appServer.Config.Port);
+        }
+
+
+        public override bool Start()
+        {
+            IsStopped = false;
+            ILog log = AppServer.Logger;
+
+            var config = AppServer.Config;
+
+            server.Start(config.Port);
+
+            IsRunning = true;
+            return true;
         }
 
         /// <summary>
@@ -244,6 +270,97 @@ namespace SuperSocket.SocketEngine
                 taskSource.SetResult(new ActiveConnectResult { Result = true, Session = session });
 
             return taskSource.Task;
+        }
+    }
+
+    class ServerListener<TRequestInfo> : INetEventListener where TRequestInfo : IRequestInfo
+    {
+        private IAppServer appServer;
+        private IRequestHandler<TRequestInfo> m_RequestHandler;
+        private IReceiveFilter<TRequestInfo> m_UdpRequestFilter;
+        private Dictionary<NetPeer,IAppSession> sessions = new Dictionary<NetPeer, IAppSession>();
+
+        public ServerListener(IAppServer appServer, IRequestHandler<TRequestInfo> m_RequestHandler, IReceiveFilter<TRequestInfo> m_UdpRequestFilter)
+        {
+            this.appServer = appServer;
+            this.m_RequestHandler = m_RequestHandler;
+            this.m_UdpRequestFilter = m_UdpRequestFilter;
+        }
+        public void OnPeerConnected(NetPeer peer)
+        {
+            Console.WriteLine("[Server] Peer connected: " + peer.EndPoint);
+            IPEndPoint endpoint = new IPEndPoint(IPAddress.Parse(peer.EndPoint.Host), peer.EndPoint.Port);
+            IAppSession appSession = appServer.CreateAppSessionFromEndpoint(endpoint);
+            sessions.Add(peer, appSession);
+            //var peers = Server.GetPeers();
+            //foreach (var netPeer in peers)
+            //{
+            //    Console.WriteLine("ConnectedPeersList: id={0}, ep={1}", netPeer.ConnectId, netPeer.EndPoint);
+            //}
+        }
+
+        public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
+        {
+            Console.WriteLine("[Server] Peer disconnected: " + peer.EndPoint + ", reason: " + disconnectInfo.Reason);
+            sessions.Remove(peer);
+        }
+
+        public void OnNetworkError(NetEndPoint endPoint, int socketErrorCode)
+        {
+            Console.WriteLine("[Server] error: " + socketErrorCode);
+        }
+
+        public void OnNetworkReceive(NetPeer peer, NetDataReader reader)
+        {
+            TRequestInfo requestInfo;
+
+            int rest;
+            try
+            {
+                requestInfo = this.m_UdpRequestFilter.Filter(reader.Data, 0, reader.Data.Length, false, out rest);
+            }
+            catch (Exception exc)
+            {
+                //if(AppServer.Logger.IsErrorEnabled)
+                    Console.WriteLine("Failed to parse UDP package!", exc);
+                return;
+            }
+
+            var udpRequestInfo = requestInfo as UdpRequestInfo;
+
+            if (rest > 0)
+            {
+                //if (AppServer.Logger.IsErrorEnabled)
+                    Console.WriteLine("The output parameter rest must be zero in this case!");
+                return;
+            }
+
+            if (udpRequestInfo == null)
+            {
+                //if (AppServer.Logger.IsErrorEnabled)
+                    Console.WriteLine("Invalid UDP package format!");
+                return;
+            }
+            IAppSession appSession = sessions[peer];
+            m_RequestHandler.ExecuteCommand(appSession, requestInfo);
+            //echo
+            peer.Send(reader.Data, SendOptions.ReliableUnordered);
+
+            //fragment log
+            if (reader.AvailableBytes == 13218)
+            {
+                Console.WriteLine("[Server] TestFrag: {0}, {1}", reader.Data[0], reader.Data[13217]);
+            }
+        }
+
+        public void OnNetworkReceiveUnconnected(NetEndPoint remoteEndPoint, NetDataReader reader, UnconnectedMessageType messageType)
+        {
+            Console.WriteLine("[Server] ReceiveUnconnected: {0}", reader.GetString(100));
+        }
+
+        public void OnNetworkLatencyUpdate(NetPeer peer, int latency)
+        {
+
         }
     }
 }
