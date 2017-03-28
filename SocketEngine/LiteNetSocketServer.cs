@@ -15,6 +15,7 @@ using LiteNetLib;
 using LiteNetLib.Utils;
 using SuperSocket.SocketBase.Logging;
 using SuperSocket.SocketBase.Config;
+using System.Security.Authentication;
 
 namespace SuperSocket.SocketEngine
 {
@@ -54,10 +55,8 @@ namespace SuperSocket.SocketEngine
 
             m_UdpRequestFilter = ((IReceiveFilterFactory<TRequestInfo>)appServer.ReceiveFilterFactory).CreateFilter(appServer, null, null);
 
-            liteServerListener = new ServerListener<TRequestInfo>(appServer, m_RequestHandler, m_UdpRequestFilter);
-            //liteServerListener = new TestServerListener();
+            liteServerListener = new ServerListener<TRequestInfo>(appServer, m_EndPointIPv4);
             Console.WriteLine("Setup NetManager with connections:" + appServer.Config.MaxConnectionNumber);
-            //server.UnsyncedEvents = true;
             server = new NetManager(liteServerListener, appServer.Config.MaxConnectionNumber /* maximum clients */, "app1");
         }
 
@@ -286,27 +285,20 @@ namespace SuperSocket.SocketEngine
     class ServerListener<TRequestInfo> : INetEventListener where TRequestInfo : IRequestInfo
     {
         private IAppServer appServer;
-        private IRequestHandler<TRequestInfo> m_RequestHandler;
-        private IReceiveFilter<TRequestInfo> m_UdpRequestFilter;
+        private IPEndPoint localEndpoint;
         private Dictionary<NetPeer,IAppSession> sessions = new Dictionary<NetPeer, IAppSession>();
 
-        public ServerListener(IAppServer appServer, IRequestHandler<TRequestInfo> m_RequestHandler, IReceiveFilter<TRequestInfo> m_UdpRequestFilter)
+        public ServerListener(IAppServer appServer, IPEndPoint localEndpoint)
         {
             this.appServer = appServer;
-            this.m_RequestHandler = m_RequestHandler;
-            this.m_UdpRequestFilter = m_UdpRequestFilter;
+            this.localEndpoint = localEndpoint;
         }
+
         public void OnPeerConnected(NetPeer peer)
         {
             Console.WriteLine("[Server] Peer connected: " + peer.EndPoint);
-            IPEndPoint endpoint = new IPEndPoint(IPAddress.Parse(peer.EndPoint.Host), peer.EndPoint.Port);
-            IAppSession appSession = appServer.CreateAppSessionFromEndpoint(endpoint);
+            IAppSession appSession = appServer.CreateAppSession(new UdpSocketSessionAdapter(peer, localEndpoint));
             sessions.Add(peer, appSession);
-            //var peers = Server.GetPeers();
-            //foreach (var netPeer in peers)
-            //{
-            //    Console.WriteLine("ConnectedPeersList: id={0}, ep={1}", netPeer.ConnectId, netPeer.EndPoint);
-            //}
         }
 
         public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
@@ -322,46 +314,14 @@ namespace SuperSocket.SocketEngine
 
         public void OnNetworkReceive(NetPeer peer, NetDataReader reader)
         {
-            Console.WriteLine("NETWORK RECEIVE:" + reader.Data.Length);
-            TRequestInfo requestInfo;
-
-            int rest = 0;
-            try
+            Console.WriteLine("[Server] receive:" + reader.Data.Length);
+            try {
+                IAppSession appSession = sessions[peer];
+                appSession.ProcessRequest(reader.Data, 0, reader.Data.Length, false);
+            } 
+            catch (Exception e)
             {
-                requestInfo = this.m_UdpRequestFilter.Filter(reader.Data, 0, reader.Data.Length, false, out rest);
-                Console.WriteLine("Rest:" + rest);
-            }
-            catch (Exception exc)
-            {
-                //if(AppServer.Logger.IsErrorEnabled)
-                    Console.WriteLine("Failed to parse UDP package!", exc);
-                return;
-            }
-
-            var udpRequestInfo = requestInfo as UdpRequestInfo;
-
-            if (rest > 0)
-            {
-                //if (AppServer.Logger.IsErrorEnabled)
-                    Console.WriteLine("The output parameter rest must be zero in this case!");
-                return;
-            }
-
-            if (udpRequestInfo == null)
-            {
-                //if (AppServer.Logger.IsErrorEnabled)
-                    Console.WriteLine("Invalid UDP package format!");
-                return;
-            }
-            IAppSession appSession = sessions[peer];
-            m_RequestHandler.ExecuteCommand(appSession, requestInfo);
-            //echo
-            peer.Send(reader.Data, SendOptions.ReliableUnordered);
-
-            //fragment log
-            if (reader.AvailableBytes == 13218)
-            {
-                Console.WriteLine("[Server] TestFrag: {0}, {1}", reader.Data[0], reader.Data[13217]);
+                Console.WriteLine(e.StackTrace);    
             }
         }
 
@@ -373,6 +333,155 @@ namespace SuperSocket.SocketEngine
         public void OnNetworkLatencyUpdate(NetPeer peer, int latency)
         {
 
+        }
+    }
+
+    class UdpSocketSessionAdapter : ISocketSession
+    {
+        NetPeer peer;
+        IPEndPoint localEndpoint;
+
+        public UdpSocketSessionAdapter(NetPeer peer, IPEndPoint localEndpoint)
+        {
+            this.peer = peer;
+            this.localEndpoint = localEndpoint;
+        }
+
+        /// <summary>
+        /// Gets the session ID.
+        /// </summary>
+        public string SessionID { 
+            get {
+                return peer.ToString();    
+            }
+        }
+
+        /// <summary>
+        /// Gets the remote endpoint.
+        /// </summary>
+        public IPEndPoint RemoteEndPoint { 
+            get {
+                return new IPEndPoint(IPAddress.Parse(peer.EndPoint.Host), peer.EndPoint.Port);        
+            }
+        }
+
+        /// <summary>
+        /// Initializes the specified app session.
+        /// </summary>
+        /// <param name="appSession">The app session.</param>
+        public void Initialize(IAppSession appSession)
+        {
+            //no need to do anything here, the NetPeer is already initialized
+        }
+
+        /// <summary>
+        /// Starts this instance.
+        /// </summary>
+        public void Start()
+        {
+            //no need to do anything here, the session is already started
+        }
+
+        /// <summary>
+        /// Closes the socket session for the specified reason.
+        /// </summary>
+        /// <param name="reason">The reason.</param>
+        public void Close(CloseReason reason)
+        {
+            
+        }
+
+
+        /// <summary>
+        /// Tries to send array segment.
+        /// </summary>
+        /// <param name="segments">The segments.</param>
+        public bool TrySend(IList<ArraySegment<byte>> segments)
+        {
+            foreach (ArraySegment<byte> bytes in segments)
+            {
+                peer.Send(ConvertToByteArray(bytes), SendOptions.ReliableOrdered);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Tries to send array segment.
+        /// </summary>
+        /// <param name="segment">The segment.</param>
+        public bool TrySend(ArraySegment<byte> segment)
+        {
+            peer.Send(ConvertToByteArray(segment), SendOptions.ReliableOrdered);
+            return true;
+        }
+
+        /// <summary>
+        /// Applies the secure protocol.
+        /// </summary>
+        public void ApplySecureProtocol()
+        {
+            
+        }
+
+        /// <summary>
+        /// Gets the client socket.
+        /// </summary>
+        public Socket Client { get; }
+
+        /// <summary>
+        /// Gets the local listening endpoint.
+        /// </summary>
+        public IPEndPoint LocalEndPoint { 
+            get {
+                return localEndpoint;    
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the secure protocol.
+        /// </summary>
+        /// <value>
+        /// The secure protocol.
+        /// </value>
+        public SslProtocols SecureProtocol { get; set; }
+
+        /// <summary>
+        /// Occurs when [closed].
+        /// </summary>
+        public Action<ISocketSession, CloseReason> Closed { get; set; }
+
+        /// <summary>
+        /// Gets the app session assosiated with this socket session.
+        /// </summary>
+        public IAppSession AppSession { get; }
+
+
+        /// <summary>
+        /// Gets the original receive buffer offset.
+        /// </summary>
+        /// <value>
+        /// The original receive buffer offset.
+        /// </value>
+        public int OrigReceiveOffset { get; }
+
+        public byte[] ConvertToByteArray(IList<ArraySegment<byte>> list)
+        {
+            var bytes = new byte[list.Sum (asb => asb.Count)];
+            int pos = 0;
+
+            foreach (var asb in list) {
+                Buffer.BlockCopy (asb.Array, asb.Offset, bytes, pos, asb.Count);
+                pos += asb.Count;
+            }
+
+            return bytes;
+        }
+
+        public byte[] ConvertToByteArray(ArraySegment<byte> asb)
+        {
+            var bytes = new byte[asb.Count];
+            Buffer.BlockCopy (asb.Array, asb.Offset, bytes, 0, asb.Count);
+            return bytes;
         }
     }
 }

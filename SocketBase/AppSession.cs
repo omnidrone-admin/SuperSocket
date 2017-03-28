@@ -200,6 +200,30 @@ namespace SuperSocket.SocketBase
         }
 
         /// <summary>
+        /// Initializes the specified app session by AppServer and IPEndPoint.
+        /// </summary>
+        /// <param name="appServer">The app server.</param>
+        /// <param name="endpoint">The IP endpoint.</param>
+        public virtual void Initialize(IAppServer<TAppSession, TRequestInfo> appServer, IPEndPoint endpoint)
+        {
+            var castedAppServer = (AppServerBase<TAppSession, TRequestInfo>)appServer;
+            AppServer = castedAppServer;
+            Charset = castedAppServer.TextEncoding;
+            //SocketSession = socketSession;
+            SessionID = endpoint.ToString();//socketSession.SessionID;
+            m_Connected = true;
+            m_ReceiveFilter = castedAppServer.ReceiveFilterFactory.CreateFilter(appServer, this, endpoint);
+
+            var filterInitializer = m_ReceiveFilter as IReceiveFilterInitializer;
+            if (filterInitializer != null)
+                filterInitializer.Initialize(castedAppServer, this);
+
+            //socketSession.Initialize(this);
+
+            OnInit();
+        }
+
+        /// <summary>
         /// Starts the session.
         /// </summary>
         void IAppSession.StartSession()
@@ -509,7 +533,6 @@ namespace SuperSocket.SocketBase
                 offsetDelta = 0;
                 return null;
             }
-
             var currentRequestLength = m_ReceiveFilter.LeftBufferSize;
 
             var requestInfo = m_ReceiveFilter.Filter(readBuffer, offset, length, toBeCopied, out rest);
@@ -572,7 +595,6 @@ namespace SuperSocket.SocketBase
             while (true)
             {
                 var requestInfo = FilterRequest(readBuffer, offset, length, toBeCopied, out rest, out offsetDelta);
-
                 if (requestInfo != null)
                 {
                     try

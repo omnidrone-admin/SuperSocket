@@ -1396,7 +1396,7 @@ namespace SuperSocket.SocketBase
 
             var appSession = new TAppSession();;
 
-            //appSession.Initialize(this, socketSession);
+            appSession.Initialize(this, endpoint);
 
             return appSession;
         }
