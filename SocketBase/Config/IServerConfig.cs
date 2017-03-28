@@ -73,6 +73,14 @@ namespace SuperSocket.SocketBase.Config
         SocketMode Mode { get; }
 
         /// <summary>
+        /// Gets a value indicating whether to use LiteNetLib for UDP.
+        /// </summary>
+        /// <value>
+        ///   <c>true</c> if [liteNetUdp]; otherwise, <c>false</c>.
+        /// </value>
+        bool LiteNetUdp { get; }
+
+        /// <summary>
         /// Gets the send time out.
         /// </summary>
         int SendTimeOut { get; }

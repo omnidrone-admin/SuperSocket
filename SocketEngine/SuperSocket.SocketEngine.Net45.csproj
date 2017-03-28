@@ -129,8 +129,9 @@
     <Compile Include="SocketSession.cs" />
     <Compile Include="TcpSocketServerBase.cs" />
     <Compile Include="UdpSocketListener.cs" />
-    <Compile Include="UdpSocketServer.cs" />
     <Compile Include="UdpSocketSession.cs" />
+    <Compile Include="LiteNetSocketServer.cs" />
+    <Compile Include="UdpSocketServer.cs" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.0">

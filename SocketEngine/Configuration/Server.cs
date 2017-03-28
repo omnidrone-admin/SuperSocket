@@ -78,6 +78,18 @@ namespace SuperSocket.SocketEngine.Configuration
             get { return (SocketMode)this["mode"]; }
         }
 
+
+        /// <summary>
+        /// Gets a value indicating whether to use LiteNetLib for UDP.
+        /// </summary>
+        /// <value>
+        ///   <c>true</c> if [liteNetUdp]; otherwise, <c>false</c>.
+        /// </value>
+        [ConfigurationProperty("liteNetUdp", IsRequired = false, DefaultValue = false)]
+        public bool LiteNetUdp
+        {
+            get { return (bool)this["liteNetUdp"]; }
+        }
         /// <summary>
         /// Gets a value indicating whether this <see cref="IServerConfig"/> is disabled.
         /// </summary>

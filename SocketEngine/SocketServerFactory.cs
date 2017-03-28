@@ -40,8 +40,14 @@ namespace SuperSocket.SocketEngine
             {
                 case(SocketMode.Tcp):
                     return new AsyncSocketServer(appServer, listeners);
-                case(SocketMode.Udp):
-                    return new UdpSocketServer<TRequestInfo>(appServer, listeners);
+                case(SocketMode.Udp): {
+                    if (config.LiteNetUdp)
+                    {
+                        return new LiteNetSocketServer<TRequestInfo>(appServer, listeners);
+                    } else {
+                        return new UdpSocketServer<TRequestInfo>(appServer, listeners);
+                    }
+                }
                 default:
                     throw new NotSupportedException("Unsupported SocketMode:" + config.Mode);
             }

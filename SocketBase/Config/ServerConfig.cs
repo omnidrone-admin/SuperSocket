@@ -117,6 +117,7 @@ namespace SuperSocket.SocketBase.Config
             Security = "None";
             MaxConnectionNumber = DefaultMaxConnectionNumber;
             Mode = SocketMode.Tcp;
+            LiteNetUdp = false;
             MaxRequestLength = DefaultMaxRequestLength;
             KeepAliveTime = DefaultKeepAliveTime;
             KeepAliveInterval = DefaultKeepAliveInterval;
@@ -194,6 +195,14 @@ namespace SuperSocket.SocketBase.Config
         /// Gets/sets the mode.
         /// </summary>
         public SocketMode Mode { get; set; }
+
+        /// <summary>
+        /// Gets a value indicating whether to use LiteNetLib for UDP.
+        /// </summary>
+        /// <value>
+        ///   <c>true</c> if [LiteNetLib]; otherwise, <c>false</c>.
+        /// </value>
+        public bool LiteNetUdp { get; set; }
 
         /// <summary>
         /// Gets/sets the send time out.
